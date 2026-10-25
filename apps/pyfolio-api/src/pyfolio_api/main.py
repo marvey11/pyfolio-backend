@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from collections.abc import AsyncGenerator, Generator  # noqa: TC003
 from contextlib import asynccontextmanager
+from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Response, status
-from sqlalchemy import select
+from pydantic import AfterValidator
+from sqlalchemy import asc, desc, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session  # noqa: TC002
 
@@ -12,6 +14,7 @@ from core.database import database_url, get_session
 from core.models import Country, Security
 from core.services import ConflictError, save
 from core.services import create_country as save_country
+from core.validation import InstrumentType, normalise_country_code
 from pyfolio_api.schemas import (
     CountryInput,
     CountryOut,
@@ -29,6 +32,7 @@ async def lifespan(_: FastAPI) -> AsyncGenerator[None]:
 
 
 app = FastAPI(title="Pyfolio API", version="0.1.0", lifespan=lifespan)
+CountryCode = Annotated[str, AfterValidator(normalise_country_code)]
 
 
 def session_dependency() -> Generator[Session]:
@@ -64,10 +68,16 @@ def list_countries(
     session: Session = Depends(session_dependency),
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=100, ge=1, le=500),
+    sort_by: str = Query(default="code", pattern="^(code|name)$"),
+    sort_order: str = Query(default="asc", pattern="^(asc|desc)$"),
 ) -> list[Country]:
+    sort_column = {"code": Country.code, "name": Country.name}[sort_by]
     return list(
         session.scalars(
-            select(Country).order_by(Country.code).offset(offset).limit(limit)
+            select(Country)
+            .order_by((asc if sort_order == "asc" else desc)(sort_column), Country.code)
+            .offset(offset)
+            .limit(limit)
         )
     )
 
@@ -139,10 +149,39 @@ def list_securities(
     session: Session = Depends(session_dependency),
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=100, ge=1, le=500),
+    sort_by: str = Query(
+        default="id",
+        pattern="^(id|isin|wkn|name|instrument_type|country|country_code)$",
+    ),
+    sort_order: str = Query(default="asc", pattern="^(asc|desc)$"),
+    instrument_type: list[InstrumentType] | None = Query(default=None),
+    country_code: list[CountryCode] | None = Query(default=None),
 ) -> list[Security]:
+    statement = select(Security)
+    if instrument_type:
+        statement = statement.where(Security.instrument_type.in_(instrument_type))
+    if country_code:
+        statement = statement.where(Security.country_code.in_(country_code))
+    if sort_by == "country":
+        statement = statement.join(Security.country)
+
+    sort_columns = {
+        "id": Security.id,
+        "isin": Security.isin,
+        "wkn": Security.wkn,
+        "name": Security.name,
+        "instrument_type": Security.instrument_type,
+        "country": Country.name,
+        "country_code": Security.country_code,
+    }
     return list(
         session.scalars(
-            select(Security).order_by(Security.id).offset(offset).limit(limit)
+            statement.order_by(
+                (asc if sort_order == "asc" else desc)(sort_columns[sort_by]),
+                Security.id,
+            )
+            .offset(offset)
+            .limit(limit)
         )
     )
 
