@@ -1,119 +1,69 @@
-# uv Monorepo Template
+# Pyfolio Backend
 
-A small Python monorepo template using [uv](https://docs.astral.sh/uv/), a `src/` layout, Ruff, mypy, pytest, and pre-commit.
+Backend services for Pyfolio, a long-term portfolio evaluation and planning application. The React frontend lives in a separate repository.
 
-## Layout
+## Architecture and scope
+
+This uv monorepo contains deployable applications under `apps/` and reusable code under `libs/`. `apps/pyfolio-api` provides the REST API; `libs/core` contains shared domain models, validation, persistence, and services. PostgreSQL is the production database. The API and future workers are intended to run as separate containers and share `core` business logic.
+
+The current iteration implements country, currency, security, security quote, and FX rate domain/persistence foundations. HTTP CRUD endpoints are available for countries and securities only. Quote and FX records are managed through shared services for future workers. Currency reference data is intentionally populated by a future dedicated worker; tests create the currency rows they need.
+
+## Requirements and setup
+
+Use Python 3.14 or newer and [uv](https://docs.astral.sh/uv/).
+
+```bash
+uv sync --locked --all-packages --all-extras --dev
+```
+
+Set `DATABASE_URL` to a PostgreSQL URL, for example:
 
 ```text
-apps/<application>/       Deployable applications
-libs/<library>/            Reusable libraries
+DATABASE_URL=postgresql+psycopg://pyfolio_app:<password>@localhost:5432/pyfolio
 ```
 
-Each application or library is an independent uv workspace member. The repository root contains shared development dependencies and tool configuration; it is not an importable application package.
+The example `postgresql+asyncpg` scheme is also accepted and adapted to the synchronous psycopg driver. SQLite URLs are supported for local tests. Never commit credentials.
 
-## Prerequisites
-
-- Python 3.14 or newer
-- uv
-
-Install uv using the [official instructions](https://docs.astral.sh/uv/getting-started/installation/), then create the environment and install all workspace and development dependencies:
+Apply migrations from the API package directory:
 
 ```bash
-uv sync
+cd apps/pyfolio-api
+uv run --package pyfolio-api alembic -c alembic.ini upgrade head
+uv run --package pyfolio-api uvicorn pyfolio_api.main:app --reload
 ```
 
-Commit `uv.lock` whenever dependency metadata changes.
+The API listens on `http://127.0.0.1:8000`; interactive OpenAPI docs are at `/docs`. Countries and securities have create, list, retrieve, partial update, and delete endpoints. Lists accept `offset` (default `0`) and `limit` (default `100`, maximum `500`).
 
-## Add a workspace member
+## Workspace
 
-Create a package with uv, then add it to the matching workspace directory:
+```text
+apps/pyfolio-api/   FastAPI application, migrations, container image
+libs/core/          Shared domain, validation, database models, and services
+scripts/            Bootstrap and coverage commands
+```
+
+Internal dependencies belong in the consuming member's `[project] dependencies` and `[tool.uv.sources]` with `workspace = true`. Add third-party dependencies through `uv`; keep `uv.lock` committed.
+
+## Development and quality
 
 ```bash
-uv init --lib --package apps/reporting
-uv init --lib --package libs/formatting
-```
-
-For an application, place its executable entry point under `src/<package_name>/` and add a console script in its `pyproject.toml` when needed. The root workspace automatically includes directories matching `apps/*` and `libs/*`; run `uv sync` after adding a member.
-
-## Dependencies
-
-Add an external dependency to a specific member with:
-
-```bash
-uv add --package runner httpx
-```
-
-Add a development-only dependency with `uv add --package runner --dev pytest-mock`. For a dependency used by the whole repository, add it to the root `dev` dependency group:
-
-```bash
-uv add --dev coverage
-```
-
-For an internal dependency, declare the package name in the consuming member and mark it as a workspace source. For example, `apps/runner/pyproject.toml` contains:
-
-```toml
-[project]
-dependencies = ["core"]
-
-[tool.uv.sources]
-core = { workspace = true }
-```
-
-Use the distribution/project name in dependency declarations and the import package name in Python code. uv updates `uv.lock`; do not edit the lockfile manually.
-
-## Commands
-
-Run commands from the repository root. `--all-packages` runs the command in the context of every workspace member.
-
-```bash
-# Install or refresh the environment
-uv sync --locked --all-packages --all-extras --dev
-
-# Run the sample application
-uv run --package runner python -m runner.main
-
-# Run all tests, or one package's tests
-uv run --all-packages pytest
-uv run pytest libs/core/tests/test_hello.py
-
-# Run all tests, including test coverage
-./scripts/run-coverage.sh
-
-# Lint and format
 uv run --all-packages ruff check .
 uv run --all-packages ruff format --check .
-uv run --all-packages ruff format .
-
-# Type-check
 uv run --all-packages mypy .
 uv run --all-packages pyright
+uv run --all-packages pytest
+./scripts/run-coverage.sh
 ```
 
-To run a command for one member, use `uv run --package <member> <command>`, for example `uv run --package runner pytest`.
+Tests live beside their package under `tests/`. SQLite is used for fast database/API tests; PostgreSQL-specific concurrency behaviour should be exercised against PostgreSQL when CI infrastructure supports it.
 
-## Build the runner image
+## Docker
 
-The runner image uses a multi-stage build and includes the internal `core` dependency. Build it from the repository root so uv can resolve the complete workspace:
+Build the API image from the repository root so uv can resolve the workspace:
 
 ```bash
-docker build --file apps/runner/Dockerfile --tag uv-runner:latest .
-docker run --rm uv-runner:latest
+docker build --file apps/pyfolio-api/Dockerfile --tag pyfolio-api:latest .
+docker run --rm -e DATABASE_URL='postgresql+psycopg://pyfolio_app:password@host.docker.internal:5432/pyfolio' -p 8000:8000 pyfolio-api:latest
 ```
 
-## Pre-commit
-
-Install the hooks once, then run them against all files:
-
-```bash
-uv run pre-commit install
-uv run pre-commit install --hook-type pre-push
-uv run pre-commit run --all-files
-```
-
-The pre-commit configuration checks the lockfile, Ruff formatting and linting, TOML/YAML/JSON files, and mypy. The pytest hook runs on pre-push.
-
-Executing `./scripts/bootstrap.sh` will also install the hooks.
-
-## Adding tests
-
-Keep tests in `<member>/tests/`. The root pytest configuration discovers tests below `apps/` and `libs/` and adds each member's `src/` directory to the import path.
+The image runs as a non-root user. Apply database migrations before starting the API.

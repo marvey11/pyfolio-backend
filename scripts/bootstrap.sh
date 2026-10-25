@@ -13,7 +13,7 @@ fi
 
 cd "$(git rev-parse --show-toplevel)"
 
-uv sync --locked --all-extras --dev
+uv sync --locked --all-packages --all-extras --dev
 uv run pre-commit install --install-hooks
 uv run pre-commit install --hook-type pre-push --install-hooks
 

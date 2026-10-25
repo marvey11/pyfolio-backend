@@ -1,13 +1,14 @@
 [project]
 name = "core"
 version = "0.1.0"
-description = "Add your description here"
+description = "Shared Pyfolio domain models, validation, persistence, and services"
 readme = "README.md"
 authors = [
-    { name = "Marco Wegner", email = "673439+marvey11@users.noreply.github.com" }
+    { name = "Marco Wegner", email = "673439+marvey11@users.noreply.github.com" },
 ]
-requires-python = ">=3.12"
-dependencies = []
+requires-python = ">=3.14"
+
+dependencies = ["pycountry>=26.2.16", "sqlalchemy>=2.1.6"]
 
 [build-system]
 requires = ["hatchling"]

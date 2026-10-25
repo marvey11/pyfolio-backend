@@ -1,6 +1,4 @@
 # Utility Scripts
 
-This folder contains the following scripts:
-
-* `bootstrap.sh` -- executes the necessary steps after first cloning the repository
-* `run-coverage.sh` -- runs tests and checks coverage; can optionally write XML and/or HTML output (off by default)
+* `bootstrap.sh` installs the complete uv workspace and development tools, then installs pre-commit hooks.
+* `run-coverage.sh` runs the test suite and enforces the repository's configured 80% coverage threshold; optional flags produce HTML and/or XML reports.

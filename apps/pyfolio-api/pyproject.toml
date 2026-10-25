@@ -1,0 +1,31 @@
+[project]
+name = "pyfolio-api"
+version = "0.1.0"
+description = "FastAPI application for the Pyfolio portfolio backend"
+readme = "README.md"
+authors = [
+    { name = "Marco Wegner", email = "673439+marvey11@users.noreply.github.com" },
+]
+requires-python = ">=3.14"
+
+dependencies = [
+    "alembic>=1.20.1",
+    "core",
+    "fastapi>=0.162.0",
+    "psycopg[binary]>=3.3.6",
+    "pycountry>=26.2.16",
+    "sqlalchemy>=2.1.6",
+    "uvicorn>=0.54.0",
+]
+
+[dependency-groups]
+dev = [
+    "httpx2>=2.16.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.uv.sources]
+core = { workspace = true }
