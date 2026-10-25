@@ -42,7 +42,7 @@ done
 
 echo "Running full test suite with coverage..."
 
-if ! uv run pytest \
+if ! uv run --all-packages pytest \
   --cov=apps \
   --cov=libs \
   "${cov_reports[@]}" \

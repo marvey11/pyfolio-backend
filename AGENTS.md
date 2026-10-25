@@ -2,27 +2,32 @@
 
 ## Repository scope
 
-This repository is a Python monorepo managed by uv. Applications live under `apps/`, reusable libraries live under `libs/`, and each workspace member is an independent Python package with a `src/` layout.
+This is the Pyfolio backend uv monorepo. Deployable applications live in `apps/`; reusable domain and service code lives in `libs/`. Each workspace member is an independent Python package with a `src/` layout. The root project is tooling-only and must not become an application package.
 
-The root project is tooling-only. Do not add application code or make the root package installable unless the repository design changes intentionally.
+`apps/pyfolio-api` owns HTTP routes, Pydantic API schemas, database migrations, and its container image. `libs/core` owns shared domain entities, validation, persistence models, and application services used by the API and future workers.
 
 ## Development workflow
 
-* Use Python 3.14 or newer, as specified by `.python*version` and the project metadata.
-* Run `uv sync --locked --all-packages --all-extras --dev` after changing project metadata or the lockfile.
-* Keep `uv.lock` committed and up to date.
-* Run `uv run --all-packages ruff check .`, `uv run --all-packages ruff format --check .`, `uv run --all-packages mypy .`, `uv run --all-packages pyright`, and `uv run --all-packages pytest` before submitting changes.
-* Prefer `uv run --package <member> ...` when checking one workspace member.
-* Format with Ruff and keep imports absolute.
+* Use Python 3.14 or newer.
+* After project metadata or lockfile changes, run `uv sync --locked --all-packages --all-extras --dev`.
+* Keep `uv.lock` committed and current. Add dependencies with uv, not by hand-editing the lockfile.
+* Run Ruff lint and format checks, mypy, pyright, pytest, and coverage before submitting changes; report checks that could not run and measured coverage.
+* Prefer `uv run --package <member> ...` for checks scoped to one workspace member.
+* Format with Ruff and use absolute imports.
 
 ## Workspace dependencies
 
-* Add internal dependencies to the consuming member's `[project] dependencies`.
-* Add the matching `[tool.uv.sources]` entry with `workspace = true`.
-* Add third-party dependencies with uv rather than editing `uv.lock` by hand.
+Declare internal dependencies in the consuming member's `[project] dependencies` and add a matching `[tool.uv.sources]` entry with `workspace = true`. Keep reusable business rules in `core`; add a new package only when the repository design warrants it.
+
+## Architecture and data integrity
+
+* Keep HTTP concerns in `pyfolio-api`; do not expose ORM entities as API responses.
+* Use Pydantic for request/response validation and SQLAlchemy for persistence.
+* Keep database constraints for uniqueness, foreign keys, and required values. Read credentials only from environment configuration and never log connection strings or secrets.
+* `Currency` is a dedicated entity. Production currency reference data is maintained by a future worker; tests may create the rows they require.
+* Quotes and FX rates are worker/service data, not REST resources. Quote exchange canonicalisation is trim plus uppercase. FX rates use foreign currency units per EUR 1.00, with EUR implicit.
+* Use Alembic for database schema changes.
 
 ## Testing
 
-Tests are discovered from `apps/` and `libs/`. The root pytest configuration adds each member's `src/` directory to the test import path, so tests can import installed package names while running from the repository root.
-
-Keep tests close to the package they cover, in that package's `tests/` directory.
+Tests live in each member's `tests/` directory. The root pytest configuration discovers tests beneath `apps/` and `libs/`. SQLite is suitable for ordinary unit and API integration tests but does not model PostgreSQL concurrency semantics; use PostgreSQL-backed integration tests where those behaviours matter.
