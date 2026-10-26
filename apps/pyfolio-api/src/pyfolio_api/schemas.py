@@ -104,3 +104,22 @@ class SecurityPatch(BaseModel):
 class SecurityOut(SecurityInput):
     model_config = ConfigDict(from_attributes=True)
     id: int
+
+
+class PaginationOut(BaseModel):
+    page: int
+    page_size: int = Field(alias="pageSize")
+    total_items: int = Field(alias="totalItems")
+    total_pages: int = Field(alias="totalPages")
+    has_previous_page: bool = Field(alias="hasPreviousPage")
+    has_next_page: bool = Field(alias="hasNextPage")
+
+
+class CountryListOut(BaseModel):
+    items: list[CountryOut]
+    pagination: PaginationOut
+
+
+class SecurityListOut(BaseModel):
+    items: list[SecurityOut]
+    pagination: PaginationOut
