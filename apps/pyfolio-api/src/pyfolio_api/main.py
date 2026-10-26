@@ -6,7 +6,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Response, status
 from pydantic import AfterValidator
-from sqlalchemy import asc, desc, select
+from sqlalchemy import asc, desc, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session  # noqa: TC002
 
@@ -17,9 +17,12 @@ from core.services import create_country as save_country
 from core.validation import InstrumentType, normalise_country_code
 from pyfolio_api.schemas import (
     CountryInput,
+    CountryListOut,
     CountryOut,
     CountryPatch,
+    PaginationOut,
     SecurityInput,
+    SecurityListOut,
     SecurityOut,
     SecurityPatch,
 )
@@ -66,22 +69,36 @@ def create_country(
         raise HTTPException(status_code=409, detail=str(error)) from error
 
 
-@api_router.get("/countries", response_model=list[CountryOut])
+@api_router.get("/countries", response_model=CountryListOut)
 def list_countries(
     session: Session = Depends(session_dependency),
-    offset: int = Query(default=0, ge=0),
-    limit: int = Query(default=100, ge=1, le=500),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=100, ge=1, le=500, alias="pageSize"),
     sort_by: str = Query(default="code", pattern="^(code|name)$"),
     sort_order: str = Query(default="asc", pattern="^(asc|desc)$"),
-) -> list[Country]:
+) -> CountryListOut:
     sort_column = {"code": Country.code, "name": Country.name}[sort_by]
-    return list(
-        session.scalars(
+    total_items = session.scalar(select(func.count()).select_from(Country)) or 0
+    items = [
+        CountryOut.model_validate(country)
+        for country in session.scalars(
             select(Country)
             .order_by((asc if sort_order == "asc" else desc)(sort_column), Country.code)
-            .offset(offset)
-            .limit(limit)
+            .offset((page - 1) * page_size)
+            .limit(page_size)
         )
+    ]
+    total_pages = (total_items + page_size - 1) // page_size
+    return CountryListOut(
+        items=items,
+        pagination=PaginationOut(
+            page=page,
+            pageSize=page_size,
+            totalItems=total_items,
+            totalPages=total_pages,
+            hasPreviousPage=1 < page <= total_pages,
+            hasNextPage=page < total_pages,
+        ),
     )
 
 
@@ -147,11 +164,11 @@ def create_security(
     return persist(session, security)  # type: ignore[return-value]
 
 
-@api_router.get("/securities", response_model=list[SecurityOut])
+@api_router.get("/securities", response_model=SecurityListOut)
 def list_securities(
     session: Session = Depends(session_dependency),
-    offset: int = Query(default=0, ge=0),
-    limit: int = Query(default=100, ge=1, le=500),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=100, ge=1, le=500, alias="pageSize"),
     sort_by: str = Query(
         default="id",
         pattern="^(id|isin|wkn|name|instrument_type|country|country_code)$",
@@ -159,7 +176,7 @@ def list_securities(
     sort_order: str = Query(default="asc", pattern="^(asc|desc)$"),
     instrument_type: list[InstrumentType] | None = Query(default=None),
     country_code: list[CountryCode] | None = Query(default=None),
-) -> list[Security]:
+) -> SecurityListOut:
     statement = select(Security)
     if instrument_type:
         statement = statement.where(Security.instrument_type.in_(instrument_type))
@@ -177,15 +194,36 @@ def list_securities(
         "country": Country.name,
         "country_code": Security.country_code,
     }
-    return list(
-        session.scalars(
+    count_statement = select(func.count()).select_from(Security)
+    if instrument_type:
+        count_statement = count_statement.where(
+            Security.instrument_type.in_(instrument_type)
+        )
+    if country_code:
+        count_statement = count_statement.where(Security.country_code.in_(country_code))
+    total_items = session.scalar(count_statement) or 0
+    items = [
+        SecurityOut.model_validate(security)
+        for security in session.scalars(
             statement.order_by(
                 (asc if sort_order == "asc" else desc)(sort_columns[sort_by]),
                 Security.id,
             )
-            .offset(offset)
-            .limit(limit)
+            .offset((page - 1) * page_size)
+            .limit(page_size)
         )
+    ]
+    total_pages = (total_items + page_size - 1) // page_size
+    return SecurityListOut(
+        items=items,
+        pagination=PaginationOut(
+            page=page,
+            pageSize=page_size,
+            totalItems=total_items,
+            totalPages=total_pages,
+            hasPreviousPage=1 < page <= total_pages,
+            hasNextPage=page < total_pages,
+        ),
     )
 
 

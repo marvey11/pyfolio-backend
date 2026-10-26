@@ -32,7 +32,7 @@ uv run --package pyfolio-api alembic -c alembic.ini upgrade head
 uv run --package pyfolio-api uvicorn pyfolio_api.main:app --reload
 ```
 
-The API listens on `http://127.0.0.1:8000`; interactive OpenAPI docs are at `/docs`. Countries and securities have create, list, retrieve, partial update, and delete endpoints. Lists accept `offset` (default `0`) and `limit` (default `100`, maximum `500`).
+The API listens on `http://127.0.0.1:8000`; interactive OpenAPI docs are at `/docs`. Countries and securities have create, list, retrieve, partial update, and delete endpoints. List endpoints return `items` and `pagination` metadata. They accept `page` (default `1`) and `pageSize` (default `100`, maximum `500`); pagination metadata includes exact filtered item counts and page navigation flags.
 
 ## Workspace
 

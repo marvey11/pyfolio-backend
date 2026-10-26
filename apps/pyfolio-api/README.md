@@ -1,6 +1,6 @@
 # pyfolio-api
 
-FastAPI application exposing CRUD endpoints for countries and securities. Request and response payloads use Pydantic schemas; shared rules and database models come from `core`. Lists use offset pagination (`offset=0`, `limit=100`, maximum `500`). Unique or referential integrity conflicts return HTTP 409; missing resources return 404 and invalid requests use FastAPI's 422 response.
+FastAPI application exposing CRUD endpoints for countries and securities. Request and response payloads use Pydantic schemas; shared rules and database models come from `core`. Country and security lists accept `page` (default `1`) and `pageSize` (default `100`, maximum `500`) and return an object containing `items` and `pagination`. Pagination metadata reports `page`, `pageSize`, exact `totalItems` matching the active filters, `totalPages`, `hasPreviousPage`, and `hasNextPage`. Unique or referential integrity conflicts return HTTP 409; missing resources return 404 and invalid requests use FastAPI's 422 response.
 
 WKN values use six uppercase letters or digits. Exchange identifiers for stored quotes are trimmed and uppercased.
 
