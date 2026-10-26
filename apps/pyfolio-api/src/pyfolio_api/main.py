@@ -4,7 +4,7 @@ from collections.abc import AsyncGenerator, Generator  # noqa: TC003
 from contextlib import asynccontextmanager
 from typing import Annotated
 
-from fastapi import Depends, FastAPI, HTTPException, Query, Response, status
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Response, status
 from pydantic import AfterValidator
 from sqlalchemy import asc, desc, select
 from sqlalchemy.exc import IntegrityError
@@ -32,6 +32,7 @@ async def lifespan(_: FastAPI) -> AsyncGenerator[None]:
 
 
 app = FastAPI(title="Pyfolio API", version="0.1.0", lifespan=lifespan)
+api_router = APIRouter(prefix="/api/v1")
 CountryCode = Annotated[str, AfterValidator(normalise_country_code)]
 
 
@@ -48,12 +49,14 @@ def persist(session: Session, entity: Country | Security) -> Country | Security:
         ) from error
 
 
-@app.get("/health")
+@api_router.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-@app.post("/countries", response_model=CountryOut, status_code=status.HTTP_201_CREATED)
+@api_router.post(
+    "/countries", response_model=CountryOut, status_code=status.HTTP_201_CREATED
+)
 def create_country(
     payload: CountryInput, session: Session = Depends(session_dependency)
 ) -> Country:
@@ -63,7 +66,7 @@ def create_country(
         raise HTTPException(status_code=409, detail=str(error)) from error
 
 
-@app.get("/countries", response_model=list[CountryOut])
+@api_router.get("/countries", response_model=list[CountryOut])
 def list_countries(
     session: Session = Depends(session_dependency),
     offset: int = Query(default=0, ge=0),
@@ -82,7 +85,7 @@ def list_countries(
     )
 
 
-@app.get("/countries/{code}", response_model=CountryOut)
+@api_router.get("/countries/{code}", response_model=CountryOut)
 def get_country(code: str, session: Session = Depends(session_dependency)) -> Country:
     country = session.get(Country, code.upper())
     if country is None:
@@ -90,7 +93,7 @@ def get_country(code: str, session: Session = Depends(session_dependency)) -> Co
     return country
 
 
-@app.patch("/countries/{code}", response_model=CountryOut)
+@api_router.patch("/countries/{code}", response_model=CountryOut)
 def patch_country(
     code: str, payload: CountryPatch, session: Session = Depends(session_dependency)
 ) -> Country:
@@ -109,7 +112,7 @@ def patch_country(
     return persist(session, country)  # type: ignore[return-value]
 
 
-@app.delete("/countries/{code}", status_code=status.HTTP_204_NO_CONTENT)
+@api_router.delete("/countries/{code}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_country(
     code: str, session: Session = Depends(session_dependency)
 ) -> Response:
@@ -127,7 +130,7 @@ def delete_country(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@app.post(
+@api_router.post(
     "/securities", response_model=SecurityOut, status_code=status.HTTP_201_CREATED
 )
 def create_security(
@@ -144,7 +147,7 @@ def create_security(
     return persist(session, security)  # type: ignore[return-value]
 
 
-@app.get("/securities", response_model=list[SecurityOut])
+@api_router.get("/securities", response_model=list[SecurityOut])
 def list_securities(
     session: Session = Depends(session_dependency),
     offset: int = Query(default=0, ge=0),
@@ -186,7 +189,7 @@ def list_securities(
     )
 
 
-@app.get("/securities/{security_id}", response_model=SecurityOut)
+@api_router.get("/securities/{security_id}", response_model=SecurityOut)
 def get_security(
     security_id: int, session: Session = Depends(session_dependency)
 ) -> Security:
@@ -196,7 +199,7 @@ def get_security(
     return security
 
 
-@app.patch("/securities/{security_id}", response_model=SecurityOut)
+@api_router.patch("/securities/{security_id}", response_model=SecurityOut)
 def patch_security(
     security_id: int,
     payload: SecurityPatch,
@@ -222,7 +225,7 @@ def patch_security(
     return persist(session, security)  # type: ignore[return-value]
 
 
-@app.delete("/securities/{security_id}", status_code=status.HTTP_204_NO_CONTENT)
+@api_router.delete("/securities/{security_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_security(
     security_id: int, session: Session = Depends(session_dependency)
 ) -> Response:
@@ -232,3 +235,6 @@ def delete_security(
     session.delete(security)
     session.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+app.include_router(api_router)
